@@ -18,11 +18,12 @@ pipeline {
 
         stage('Install & Test') {
             steps {
-                echo "Installing dependencies and running tests..."
+                echo "Verifying dependencies inside Docker..."
                 sh '''
-                    pip3 install -r requirements.txt
-                    python3 -c "import flask, psutil; print('Dependencies OK')"
-                    curl -sf http://localhost:5000/health || echo "App not running yet - skipping health check"
+                    docker run --rm \
+                        -v "$(pwd)/requirements.txt:/requirements.txt" \
+                        python:3.11-slim \
+                        sh -c "pip install --quiet -r /requirements.txt && python -c 'import flask, psutil; print(\"Dependencies OK\")'"
                 '''
             }
         }
