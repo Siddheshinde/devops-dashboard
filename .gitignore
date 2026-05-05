@@ -63,5 +63,6 @@ Thumbs.db
 *.temp
 
 # Personal planning notes
-*.md
-
+plan.md
+roadmap.md
+search.md
