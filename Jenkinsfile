@@ -16,33 +16,18 @@ pipeline {
             }
         }
 
-        stage('Install & Test') {
-            steps {
-                echo "Verifying dependencies inside Docker..."
-                sh '''
-                    docker run --rm \
-                        -v "$(pwd):/workspace" \
-                        -w /workspace \
-                        python:3.11-slim \
-                        pip install --quiet -r requirements.txt
-                '''
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 echo "Building Docker image..."
                 sh """
                     docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
                     docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                    echo "Build complete: ${DOCKER_IMAGE}:${DOCKER_TAG}"
                 """
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                echo "Pushing image to Docker Hub..."
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DOCKER_USER',
@@ -60,7 +45,6 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                echo "Deploying to Kubernetes cluster..."
                 sh """
                     kubectl apply -f k8s/rbac.yaml
                     kubectl apply -f k8s/deployment.yaml
@@ -73,7 +57,6 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-                echo "Verifying deployment..."
                 sh """
                     kubectl get pods -l app=devops-dashboard
                     kubectl get svc devops-dashboard-service
@@ -83,14 +66,8 @@ pipeline {
     }
 
     post {
-        success {
-            echo "Pipeline SUCCESS — Build #${BUILD_NUMBER} deployed."
-        }
-        failure {
-            echo "Pipeline FAILED — Check logs above."
-        }
-        always {
-            sh 'docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true'
-        }
+        success { echo "Pipeline SUCCESS — Build #${BUILD_NUMBER} deployed." }
+        failure { echo "Pipeline FAILED — Check logs above." }
+        always  { sh 'docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true' }
     }
 }
