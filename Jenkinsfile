@@ -21,9 +21,10 @@ pipeline {
                 echo "Verifying dependencies inside Docker..."
                 sh '''
                     docker run --rm \
-                        -v "$(pwd)/requirements.txt:/requirements.txt" \
+                        -v "$(pwd):/workspace" \
+                        -w /workspace \
                         python:3.11-slim \
-                        pip install --quiet -r /requirements.txt
+                        pip install --quiet -r requirements.txt
                 '''
             }
         }
