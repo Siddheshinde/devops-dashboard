@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DevOps Monitoring Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0a0f1e; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; }
+    .card-glow:hover { border-color: #3b82f6; box-shadow: 0 0 20px rgba(59,130,246,0.15); transition: all 0.3s; }
+    .status-running  { color: #22c55e; }
+    .status-exited   { color: #ef4444; }
+    .status-paused   { color: #f59e0b; }
+    .status-running-pod { color: #22c55e; }
+    .status-pending  { color: #f59e0b; }
+    .status-failed   { color: #ef4444; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e;
+                 animation: pulse 2s infinite; display: inline-block; margin-right: 6px; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+    .countdown-ring { stroke-dasharray: 88; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111827; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    table { border-collapse: collapse; }
+    th { position: sticky; top: 0; background: #111827; }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen font-mono">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="text-2xl">⚡</div>
+      <div>
+        <h1 class="text-xl font-bold text-white">DevOps Monitoring Dashboard</h1>
+        <p class="text-xs text-gray-500">Real-time system &amp; infrastructure health</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 text-sm">
+        <span class="pulse-dot"></span>
+        <span class="text-green-400 font-semibold">LIVE</span>
+      </div>
+      <div class="text-right">
+        <div class="text-xs text-gray-500">Last Updated</div>
+        <div id="last-updated" class="text-sm text-gray-300">--:--:--</div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-gray-500">
+        Refresh in
+        <svg width="28" height="28" viewBox="0 0 28 28">
+          <circle cx="14" cy="14" r="10" fill="none" stroke="#1f2937" stroke-width="3"/>
+          <circle id="countdown-arc" cx="14" cy="14" r="10" fill="none" stroke="#3b82f6"
+                  stroke-width="3" stroke-linecap="round" class="countdown-ring"
+                  transform="rotate(-90 14 14)"/>
+        </svg>
+        <span id="countdown-num" class="text-blue-400 font-bold">5</span>s
+      </div>
+    </div>
+  </header>
+
+  <main class="p-6 space-y-6 max-w-screen-2xl mx-auto">
+
+    <!-- Uptime Banner -->
+    <div class="card px-5 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-sm text-gray-400">
+        🖥️ <span>System Uptime:</span>
+        <span id="uptime" class="text-white font-semibold">Loading...</span>
+      </div>
+      <div class="flex items-center gap-2 text-sm text-gray-400">
+        🌐 <span>Network Sent:</span>
+        <span id="net-sent" class="text-white font-semibold">--</span>
+        <span class="text-gray-600">|</span>
+        <span>Received:</span>
+        <span id="net-recv" class="text-white font-semibold">--</span>
+      </div>
+    </div>
+
+    <!-- Gauge Row -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+      <!-- CPU Card -->
+      <div class="card card-glow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest">CPU Usage</h2>
+          <span class="text-xs text-gray-600">🔲 Processor</span>
+        </div>
+        <div class="relative w-40 h-40 mx-auto">
+          <canvas id="cpuChart"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="cpu-percent" class="text-3xl font-bold text-white">0%</span>
+            <span class="text-xs text-gray-500">in use</span>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-500">
+          <div>Cores: <span id="cpu-cores" class="text-gray-300">--</span></div>
+          <div>Threads: <span id="cpu-threads" class="text-gray-300">--</span></div>
+          <div colspan="2">Freq: <span id="cpu-freq" class="text-gray-300">--</span> MHz</div>
+        </div>
+      </div>
+
+      <!-- RAM Card -->
+      <div class="card card-glow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest">Memory (RAM)</h2>
+          <span class="text-xs text-gray-600">💾 DRAM</span>
+        </div>
+        <div class="relative w-40 h-40 mx-auto">
+          <canvas id="ramChart"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="ram-percent" class="text-3xl font-bold text-white">0%</span>
+            <span class="text-xs text-gray-500">used</span>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-500">
+          <div>Total: <span id="ram-total" class="text-gray-300">--</span> GB</div>
+          <div>Used: <span id="ram-used" class="text-gray-300">--</span> GB</div>
+          <div colspan="2">Free: <span id="ram-free" class="text-gray-300">--</span> GB</div>
+        </div>
+      </div>
+
+      <!-- Disk Card -->
+      <div class="card card-glow p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest">Disk Usage</h2>
+          <span class="text-xs text-gray-600">🗄️ Storage</span>
+        </div>
+        <div class="relative w-40 h-40 mx-auto">
+          <canvas id="diskChart"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="disk-percent" class="text-3xl font-bold text-white">0%</span>
+            <span class="text-xs text-gray-500">used</span>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-500">
+          <div>Total: <span id="disk-total" class="text-gray-300">--</span> GB</div>
+          <div>Used: <span id="disk-used" class="text-gray-300">--</span> GB</div>
+          <div colspan="2">Free: <span id="disk-free" class="text-gray-300">--</span> GB</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Docker Containers -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest">
+          🐳 Docker Containers
+        </h2>
+        <span id="docker-count" class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded-full">0 containers</span>
+      </div>
+      <div id="docker-error" class="hidden text-sm text-yellow-400 bg-yellow-900/20 border border-yellow-700 rounded p-3 mb-3"></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+              <th class="text-left py-2 pr-4">ID</th>
+              <th class="text-left py-2 pr-4">Name</th>
+              <th class="text-left py-2 pr-4">Image</th>
+              <th class="text-left py-2 pr-4">Ports</th>
+              <th class="text-left py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody id="docker-table">
+            <tr><td colspan="5" class="py-4 text-center text-gray-600">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Kubernetes Pods -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-widest">
+          ☸️ Kubernetes Pods
+        </h2>
+        <span id="k8s-count" class="text-xs bg-purple-900 text-purple-300 px-2 py-1 rounded-full">0 pods</span>
+      </div>
+      <div id="k8s-error" class="hidden text-sm text-yellow-400 bg-yellow-900/20 border border-yellow-700 rounded p-3 mb-3"></div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-xs text-gray-500 uppercase border-b border-gray-800">
+              <th class="text-left py-2 pr-4">Pod Name</th>
+              <th class="text-left py-2 pr-4">Namespace</th>
+              <th class="text-left py-2 pr-4">Node</th>
+              <th class="text-left py-2 pr-4">Restarts</th>
+              <th class="text-left py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody id="k8s-table">
+            <tr><td colspan="5" class="py-4 text-center text-gray-600">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // ---- Chart helpers ----
+    function makeGauge(id, label) {
+      const ctx = document.getElementById(id).getContext('2d');
+      return new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          datasets: [{
+            data: [0, 100],
+            backgroundColor: ['#3b82f6', '#1f2937'],
+            borderWidth: 0,
+            circumference: 270,
+            rotation: -135,
+          }]
+        },
+        options: {
+          cutout: '78%',
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          animation: { duration: 600 }
+        }
+      });
+    }
+
+    function updateGauge(chart, pct, el) {
+      const color = pct > 85 ? '#ef4444' : pct > 60 ? '#f59e0b' : '#22c55e';
+      chart.data.datasets[0].data = [pct, 100 - pct];
+      chart.data.datasets[0].backgroundColor[0] = color;
+      chart.update();
+      el.textContent = pct + '%';
+      el.style.color = color;
+    }
+
+    const cpuChart  = makeGauge('cpuChart');
+    const ramChart  = makeGauge('ramChart');
+    const diskChart = makeGauge('diskChart');
+
+    // ---- Status badge ----
+    function statusBadge(status, type) {
+      const s = (status || '').toLowerCase();
+      let color = 'gray';
+      if (type === 'docker') {
+        if (s === 'running') color = 'green';
+        else if (s === 'exited' || s === 'dead') color = 'red';
+        else color = 'yellow';
+      } else {
+        if (s === 'running') color = 'green';
+        else if (s === 'failed') color = 'red';
+        else if (s === 'pending') color = 'yellow';
+        else color = 'blue';
+      }
+      const map = {
+        green:  'bg-green-900/40 text-green-400 border border-green-700',
+        red:    'bg-red-900/40 text-red-400 border border-red-700',
+        yellow: 'bg-yellow-900/40 text-yellow-400 border border-yellow-700',
+        blue:   'bg-blue-900/40 text-blue-400 border border-blue-700',
+        gray:   'bg-gray-800 text-gray-400 border border-gray-700',
+      };
+      return `<span class="px-2 py-0.5 rounded text-xs font-semibold ${map[color]}">${status}</span>`;
+    }
+
+    // ---- Countdown ring ----
+    let countdown = 5;
+    const arc = document.getElementById('countdown-arc');
+    const numEl = document.getElementById('countdown-num');
+    const CIRC = 62.8; // 2π×10
+
+    function tickCountdown() {
+      countdown--;
+      numEl.textContent = countdown;
+      arc.style.strokeDashoffset = CIRC * (1 - countdown / 5);
+      if (countdown <= 0) {
+        countdown = 5;
+        arc.style.strokeDashoffset = 0;
+      }
+    }
+
+    // ---- Main fetch ----
+    async function fetchMetrics() {
+      try {
+        const res = await fetch('/api/metrics');
+        const d = await res.json();
+
+        // Timestamp
+        document.getElementById('last-updated').textContent = d.timestamp || '--';
+
+        // Uptime & Network
+        document.getElementById('uptime').textContent = d.uptime || '--';
+        document.getElementById('net-sent').textContent = (d.network?.bytes_sent_mb || 0) + ' MB';
+        document.getElementById('net-recv').textContent = (d.network?.bytes_recv_mb || 0) + ' MB';
+
+        // CPU
+        const cpu = d.cpu;
+        updateGauge(cpuChart, cpu.percent, document.getElementById('cpu-percent'));
+        document.getElementById('cpu-cores').textContent   = cpu.cores;
+        document.getElementById('cpu-threads').textContent = cpu.threads;
+        document.getElementById('cpu-freq').textContent    = cpu.freq_mhz;
+
+        // RAM
+        const mem = d.memory;
+        updateGauge(ramChart, mem.percent, document.getElementById('ram-percent'));
+        document.getElementById('ram-total').textContent = mem.total_gb;
+        document.getElementById('ram-used').textContent  = mem.used_gb;
+        document.getElementById('ram-free').textContent  = mem.available_gb;
+
+        // Disk
+        const disk = d.disk;
+        updateGauge(diskChart, disk.percent, document.getElementById('disk-percent'));
+        document.getElementById('disk-total').textContent = disk.total_gb;
+        document.getElementById('disk-used').textContent  = disk.used_gb;
+        document.getElementById('disk-free').textContent  = disk.free_gb;
+
+        // Docker
+        const docker = d.docker;
+        const dockerErr = document.getElementById('docker-error');
+        if (docker.error) {
+          dockerErr.textContent = '⚠ Docker: ' + docker.error;
+          dockerErr.classList.remove('hidden');
+        } else {
+          dockerErr.classList.add('hidden');
+        }
+        const dockerTb = document.getElementById('docker-table');
+        document.getElementById('docker-count').textContent = (docker.data?.length || 0) + ' containers';
+        if (!docker.data || docker.data.length === 0) {
+          dockerTb.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-gray-600">No containers found</td></tr>';
+        } else {
+          dockerTb.innerHTML = docker.data.map(c => `
+            <tr class="border-b border-gray-800/60 hover:bg-gray-800/30 transition-colors">
+              <td class="py-2 pr-4 text-gray-500 font-mono text-xs">${c.id}</td>
+              <td class="py-2 pr-4 text-white">${c.name}</td>
+              <td class="py-2 pr-4 text-blue-400 text-xs">${c.image}</td>
+              <td class="py-2 pr-4 text-gray-400 text-xs">${c.ports}</td>
+              <td class="py-2">${statusBadge(c.status, 'docker')}</td>
+            </tr>`).join('');
+        }
+
+        // Kubernetes
+        const k8s = d.kubernetes;
+        const k8sErr = document.getElementById('k8s-error');
+        if (k8s.error) {
+          k8sErr.textContent = '⚠ Kubernetes: ' + k8s.error;
+          k8sErr.classList.remove('hidden');
+        } else {
+          k8sErr.classList.add('hidden');
+        }
+        const k8sTb = document.getElementById('k8s-table');
+        document.getElementById('k8s-count').textContent = (k8s.data?.length || 0) + ' pods';
+        if (!k8s.data || k8s.data.length === 0) {
+          k8sTb.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-gray-600">No pods found — connect to a Kubernetes cluster</td></tr>';
+        } else {
+          k8sTb.innerHTML = k8s.data.map(p => `
+            <tr class="border-b border-gray-800/60 hover:bg-gray-800/30 transition-colors">
+              <td class="py-2 pr-4 text-white text-xs">${p.name}</td>
+              <td class="py-2 pr-4 text-purple-400 text-xs">${p.namespace}</td>
+              <td class="py-2 pr-4 text-gray-400 text-xs">${p.node}</td>
+              <td class="py-2 pr-4 text-center text-xs ${p.restarts > 0 ? 'text-yellow-400' : 'text-gray-500'}">${p.restarts}</td>
+              <td class="py-2">${statusBadge(p.status, 'k8s')}</td>
+            </tr>`).join('');
+        }
+
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    }
+
+    // Initial load + interval
+    fetchMetrics();
+    setInterval(() => {
+      tickCountdown();
+      if (countdown === 5) fetchMetrics();
+    }, 1000);
+  </script>
+</body>
+</html>
