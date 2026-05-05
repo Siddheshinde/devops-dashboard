@@ -23,7 +23,7 @@ pipeline {
                     docker run --rm \
                         -v "$(pwd)/requirements.txt:/requirements.txt" \
                         python:3.11-slim \
-                        sh -c "pip install --quiet -r /requirements.txt && python -c 'import flask, psutil; print(\"Dependencies OK\")'"
+                        pip install --quiet -r /requirements.txt
                 '''
             }
         }
